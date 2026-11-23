@@ -18,6 +18,10 @@ categories = ["command-line-utilities", "development-tools"]
 loom-core = { package = "loom-vcs-core", path = "crates/loom-core", version = "0.1.0" }
 loom-vfs = { package = "loom-vcs-vfs", path = "crates/loom-vfs", version = "0.1.0" }
 loom-daemon = { package = "loom-vcs-daemon", path = "crates/loom-daemon", version = "0.1.0" }
+loom-server = { package = "loom-vcs-server", path = "crates/loom-server", version = "0.1.0" }
+
+# HTTP Client (pure-Rust rustls + ring, no OpenSSL/cmake)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json"] }
 
 # Async & IPC
 tokio = { version = "1.54.1", features = ["full"] }

@@ -189,6 +189,20 @@ pub enum RpcMethod {
         remote: Option<String>,
         branch: Option<String>,
     },
+    RemotePush {
+        remote: Option<String>,
+        branch: Option<String>,
+        #[serde(default)]
+        token: Option<String>,
+        #[serde(default)]
+        force: bool,
+    },
+    RemotePull {
+        remote: Option<String>,
+        branch: Option<String>,
+        #[serde(default)]
+        token: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +263,8 @@ pub enum RpcPayload {
     Drop(DropResult),
     GitPush(GitPushResult),
     GitPull(GitPullResult),
+    RemotePush(NativeRemotePushResult),
+    RemotePull(NativeRemotePullResult),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -528,6 +544,36 @@ pub struct GitPullResult {
     pub pulled_commit_oids: Vec<String>,
     pub restored_capsule_ids: Vec<String>,
     pub synthesized_capsule_ids: Vec<String>,
+    pub restored_negative_edges: usize,
+    pub updated_trunk: bool,
+    pub rebased_viewports: Vec<ViewportRebaseStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct NativeRemotePushResult {
+    pub remote: String,
+    pub remote_url: String,
+    pub branch: String,
+    pub head_capsule_id: Option<String>,
+    pub head_snapshot_cas: Option<String>,
+    pub pushed_capsule_ids: Vec<String>,
+    pub uploaded_cas_blobs: usize,
+    pub pushed_patches: usize,
+    pub pushed_negative_edges: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct NativeRemotePullResult {
+    pub remote: String,
+    pub remote_url: String,
+    pub branch: String,
+    pub head_capsule_id: Option<String>,
+    pub head_snapshot_cas: Option<String>,
+    pub pulled_capsule_ids: Vec<String>,
+    pub downloaded_cas_blobs: usize,
+    pub pulled_patches: usize,
     pub restored_negative_edges: usize,
     pub updated_trunk: bool,
     pub rebased_viewports: Vec<ViewportRebaseStatus>,

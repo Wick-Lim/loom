@@ -351,6 +351,21 @@ async fn dispatch_method(
         RpcMethod::GitPull { remote, branch } => git_sync::git_pull(ctx, remote, branch)
             .await
             .map(RpcPayload::GitPull),
+        RpcMethod::RemotePush {
+            remote,
+            branch,
+            token,
+            force,
+        } => crate::remote_sync::remote_push(ctx, remote, branch, token, force)
+            .await
+            .map(RpcPayload::RemotePush),
+        RpcMethod::RemotePull {
+            remote,
+            branch,
+            token,
+        } => crate::remote_sync::remote_pull(ctx, remote, branch, token)
+            .await
+            .map(RpcPayload::RemotePull),
         #[allow(unreachable_patterns)]
         _ => Err(RpcError::new(
             RpcErrorCode::NotImplemented,

@@ -4,5 +4,6 @@ pub mod crdt;
 pub mod cst;
 pub mod db;
 pub mod model;
+pub mod remote;
 pub mod rpc;
 pub mod wal;

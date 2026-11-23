@@ -1250,7 +1250,7 @@ fn read_tree_files_map(
     Ok(out)
 }
 
-fn load_snapshot_bytes_map(
+pub(crate) fn load_snapshot_bytes_map(
     cas: &CasStore,
     snap_hash: Blake3Hash,
 ) -> Result<BTreeMap<PathBuf, Vec<u8>>, RpcError> {
@@ -1265,7 +1265,7 @@ fn load_snapshot_bytes_map(
     Ok(out)
 }
 
-fn store_bytes_map_snapshot(
+pub(crate) fn store_bytes_map_snapshot(
     cas: &CasStore,
     files: &BTreeMap<PathBuf, Vec<u8>>,
 ) -> Result<Blake3Hash, RpcError> {
@@ -1347,7 +1347,7 @@ fn sync_trunk_worktree_from_map(
     Ok(())
 }
 
-fn merge_3way_trees(
+pub(crate) fn merge_3way_trees(
     base_files: &BTreeMap<PathBuf, Vec<u8>>,
     remote_files: &BTreeMap<PathBuf, Vec<u8>>,
     local_files: &BTreeMap<PathBuf, Vec<u8>>,
@@ -1627,7 +1627,7 @@ fn merge_3way_trees(
     Ok((merged, snap_hash))
 }
 
-enum ViewportRebasePlan {
+pub(crate) enum ViewportRebasePlan {
     Clean {
         writes: BTreeMap<PathBuf, Vec<u8>>,
         deletes: Vec<PathBuf>,
@@ -1637,7 +1637,7 @@ enum ViewportRebasePlan {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn compute_viewport_rebase_plan(
+pub(crate) fn compute_viewport_rebase_plan(
     vp: &ViewportRecord,
     old_trunk_snapshot_cas: Blake3Hash,
     new_trunk_snapshot_cas: Blake3Hash,

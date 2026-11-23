@@ -132,10 +132,11 @@ cargo install loom-vcs
 
 | 경로 | 설명 |
 | :--- | :--- |
-| `crates/loom-core` (`loom-vcs-core`) | 핵심 데이터 모델, `config.toml`, BLAKE3 WAL, Zstd-3 CAS, `redb` ACID 스토어, 4개 언어 Tree-sitter CST 엔진, `automerge` CRDT, RPC 프레임 |
+| `crates/loom-core` (`loom-vcs-core`) | 핵심 데이터 모델, `config.toml`, BLAKE3 WAL, Zstd-3 CAS, `redb` ACID 스토어, 4개 언어 Tree-sitter CST 엔진, `automerge` CRDT, RPC 프레임, 네이티브 원격 프로토콜 DTO |
 | `crates/loom-vfs` (`loom-vcs-vfs`) | `ViewportDriver` 트레이트 및 OS별 CoW 드라이버 (`macos.rs`, `linux.rs`, `windows.rs`) |
-| `crates/loom-daemon` (`loom-vcs-daemon`) | 단일-라이터 `loomd` 데몬, 크래시 복구, 뷰포트 매니저, 실시간 `notify` 레이더, `rmcp` MCP 서버, 캡슐/실패 기억, `gix` Git 브리지 |
-| `crates/loom-cli` (`loom-vcs`) | `loom` 초경량 CLI(멀티콜 `loomd` 진입 지원) 및 `ratatui` 레이더 TUI |
+| `crates/loom-daemon` (`loom-vcs-daemon`) | 단일-라이터 `loomd` 데몬, 크래시 복구, 뷰포트 매니저, 실시간 `notify` 레이더, `rmcp` MCP 서버, 캡슐/실패 기억, `gix` Git 브리지, 네이티브 원격 동기화 |
+| `crates/loom-server` (`loom-vcs-server`) | 독립 Loom 네이티브 원격 HTTP 서버 (`loom-server` / `loom serve`), Bearer 토큰 인증, Zstd-3 CAS · 캡슐 DAG · 실패 기억 동기화 |
+| `crates/loom-cli` (`loom-vcs`) | `loom` 초경량 CLI(멀티콜 `loomd`/`loom-server` 진입 지원) 및 `ratatui` 레이더 TUI |
 | `npm/` | `loom-vcs` 루트 패키지 및 6개 플랫폼별 네이티브 바이너리 npm 패키지 |
 | `Formula/` · `packaging/` · `scripts/` | Homebrew Formula, Scoop/Winget 매니페스트, 매니페스트 생성기 및 Shell/PowerShell 설치 스크립트 |
 | `e2e-suite/` | 독립 Opaque-Box E2E 테스트 스위트 (Tier 0~4, 283개 테스트) |
@@ -201,7 +202,14 @@ loom log --capsules --symbol crate::auth::TokenVerifier::verify
 loom undo
 loom gc --prune-viewports
 
-# 7. 표준 Git 원격과 커밋 + refs/notes/loom 양방향 동기화
+# 7. Loom 네이티브 원격 서버 실행 및 원격 동기화 (Zstd-3 CAS + 캡슐 DAG + 실패 기억 원본 보존)
+LOOM_SERVER_TOKEN=my-secret loom serve --bind 127.0.0.1:9418 --data-dir ./loom-data
+loom remote add origin http://127.0.0.1:9418/my-repo --token-env LOOM_TOKEN
+LOOM_TOKEN=my-secret loom push origin main
+LOOM_TOKEN=my-secret loom pull origin main
+LOOM_TOKEN=my-secret loom clone http://127.0.0.1:9418/my-repo ./my-repo-copy
+
+# 8. 표준 Git 원격과 커밋 + refs/notes/loom 양방향 동기화
 loom git push origin main
 loom git pull origin main
 ```
@@ -225,6 +233,11 @@ loom git pull origin main
 | `loom undo [--op <SEQ_ID>]` | `op_log` 기반 직전 또는 지정 시퀀스 상태 전이 원자적 롤백 |
 | `loom gc [--prune-viewports]` | 종료된 뷰포트 정리, 미참조 CAS 청크 및 컴팩션된 WAL 세그먼트 정리 |
 | `loom mcp serve [--viewport <NAME_OR_ID>] [--http <ADDR>]` | 내장 MCP 서버 실행 (기본 `stdio`, `--http` 지정 시 Streamable HTTP) |
+| `loom serve [--bind <ADDR>] [--data-dir <DIR>] [--token <TOKEN>]` | Loom 네이티브 원격 HTTP 서버 실행 (`loom-server` 멀티콜 지원, `LOOM_SERVER_TOKEN` 인증) |
+| `loom remote <add|list|set-url|remove> ...` | `.loom/config.toml` 네이티브 원격 저장소 및 `--token` / `--token-env` 설정 관리 |
+| `loom push [REMOTE] [BRANCH] [--token <TOKEN>] [--force]` | Zstd-3 CAS 블롭 · 캡슐 DAG · 패치 · 실패 기억을 Loom 네이티브 원격으로 무손실 전송 |
+| `loom pull [REMOTE] [BRANCH] [--token <TOKEN>]` | 네이티브 원격 캡슐 · 실패 기억 증분 동기화 및 3-way 병합 / 활성 뷰포트 자동 리베이스 |
+| `loom clone <URL> [DEST] [--branch <BRANCH>] [--token-env <ENV>]` | `.git` 없이 네이티브 원격에서 CAS · 캡슐 · 실패 기억을 그대로 복제 초기화 |
 | `loom git push [REMOTE] [BRANCH]` | 봉인된 캡슐과 `refs/notes/loom` 노트를 Git 원격으로 투영 전송 |
 | `loom git pull [REMOTE] [BRANCH]` | 원격 Git 커밋과 `refs/notes/loom` 노트를 역산 흡수 및 활성 뷰포트 리베이스 |
 

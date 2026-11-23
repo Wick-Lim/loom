@@ -4,8 +4,8 @@ mod tui;
 
 use clap::{Parser, Subcommand};
 use std::ffi::OsStr;
-use std::path::Path;
-use std::path::PathBuf;
+use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
 #[command(name = "loom", version, about = "Project Loom Local-First Multi-Agent VCS")]
@@ -120,6 +120,84 @@ enum Commands {
         #[command(subcommand)]
         command: GitCommands,
     },
+
+    /// Run a Loom-native remote HTTP CAS & causal-ledger server
+    Serve {
+        /// Directory where remote Loom repositories are stored
+        #[arg(long, env = "LOOM_SERVER_DATA_DIR", default_value = "./loom-data")]
+        data_dir: PathBuf,
+        /// TCP address to listen on
+        #[arg(long, env = "LOOM_SERVER_BIND", default_value = "127.0.0.1:9418")]
+        bind: SocketAddr,
+        /// Bearer token(s) accepted on /v1/* routes (repeatable or comma-separated via LOOM_SERVER_TOKEN)
+        #[arg(long = "token", env = "LOOM_SERVER_TOKEN", value_delimiter = ',')]
+        tokens: Vec<String>,
+        /// Explicitly allow unauthenticated requests (development/local testing only)
+        #[arg(long)]
+        no_auth: bool,
+        /// Disable automatic initialization of new repositories on first push
+        #[arg(long)]
+        no_auto_create: bool,
+    },
+
+    /// Manage configured Loom-native remotes in .loom/config.toml
+    Remote {
+        #[command(subcommand)]
+        command: RemoteCommands,
+    },
+
+    /// Push native Loom capsules, patches, CAS blobs, and NegativeEdges to a Loom remote
+    Push {
+        remote: Option<String>,
+        branch: Option<String>,
+        #[arg(long, env = "LOOM_TOKEN")]
+        token: Option<String>,
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Pull native Loom capsules, patches, CAS blobs, and NegativeEdges from a Loom remote
+    Pull {
+        remote: Option<String>,
+        branch: Option<String>,
+        #[arg(long, env = "LOOM_TOKEN")]
+        token: Option<String>,
+    },
+
+    /// Clone a native Loom repository from a Loom remote URL
+    Clone {
+        url: String,
+        dest: Option<PathBuf>,
+        #[arg(long)]
+        branch: Option<String>,
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        #[arg(long, env = "LOOM_TOKEN")]
+        token: Option<String>,
+        #[arg(long)]
+        token_env: Option<String>,
+        #[arg(long)]
+        colocate_git: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RemoteCommands {
+    /// Add a named Loom remote URL
+    Add {
+        name: String,
+        url: String,
+        #[arg(long)]
+        token: Option<String>,
+        #[arg(long)]
+        token_env: Option<String>,
+    },
+    /// List configured Loom remotes
+    List,
+    /// Remove a named Loom remote
+    Remove { name: String },
+    /// Update the URL of an existing Loom remote
+    SetUrl { name: String, url: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -149,11 +227,44 @@ enum McpCommands {
     },
 }
 
+#[derive(Debug, Parser)]
+#[command(name = "loom-server", version, about = "Project Loom native remote server")]
+struct MulticallServerCli {
+    #[arg(long, env = "LOOM_SERVER_DATA_DIR", default_value = "./loom-data")]
+    data_dir: PathBuf,
+    #[arg(long, env = "LOOM_SERVER_BIND", default_value = "127.0.0.1:9418")]
+    bind: SocketAddr,
+    #[arg(long = "token", env = "LOOM_SERVER_TOKEN", value_delimiter = ',')]
+    tokens: Vec<String>,
+    #[arg(long)]
+    no_auth: bool,
+    #[arg(long)]
+    no_auto_create: bool,
+}
+
 fn main() -> anyhow::Result<()> {
-    if let Some(arg0) = std::env::args_os().next()
-        && Path::new(&arg0).file_stem() == Some(OsStr::new("loomd"))
-    {
-        return loom_daemon::run_cli_from_args();
+    if let Some(arg0) = std::env::args_os().next() {
+        let stem = Path::new(&arg0).file_stem();
+        if stem == Some(OsStr::new("loomd")) {
+            return loom_daemon::run_cli_from_args();
+        }
+        if stem == Some(OsStr::new("loom-server")) {
+            let srv = MulticallServerCli::parse();
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .with_writer(std::io::stderr)
+                .init();
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            return rt.block_on(commands::cmd_serve(
+                srv.data_dir,
+                srv.bind,
+                srv.tokens,
+                srv.no_auth,
+                srv.no_auto_create,
+            ));
+        }
     }
 
     let cli = Cli::parse();
@@ -247,6 +358,91 @@ fn main() -> anyhow::Result<()> {
                     Ok(0)
                 }
             },
+            Commands::Serve {
+                data_dir,
+                bind,
+                tokens,
+                no_auth,
+                no_auto_create,
+            } => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                    .with_writer(std::io::stderr)
+                    .init();
+                commands::cmd_serve(data_dir, bind, tokens, no_auth, no_auto_create).await?;
+                Ok(0)
+            }
+            Commands::Remote { command } => match command {
+                RemoteCommands::Add {
+                    name,
+                    url,
+                    token,
+                    token_env,
+                } => {
+                    commands::cmd_remote_add(
+                        cli.repo.as_deref(),
+                        name,
+                        url,
+                        token,
+                        token_env,
+                        cli.json,
+                    )?;
+                    Ok(0)
+                }
+                RemoteCommands::List => {
+                    commands::cmd_remote_list(cli.repo.as_deref(), cli.json)?;
+                    Ok(0)
+                }
+                RemoteCommands::Remove { name } => {
+                    commands::cmd_remote_remove(cli.repo.as_deref(), name, cli.json)?;
+                    Ok(0)
+                }
+                RemoteCommands::SetUrl { name, url } => {
+                    commands::cmd_remote_set_url(cli.repo.as_deref(), name, url, cli.json)?;
+                    Ok(0)
+                }
+            },
+            Commands::Push {
+                remote,
+                branch,
+                token,
+                force,
+            } => {
+                commands::cmd_remote_push(cli.repo.as_deref(), remote, branch, token, force, cli.json)
+                    .await?;
+                Ok(0)
+            }
+            Commands::Pull {
+                remote,
+                branch,
+                token,
+            } => {
+                commands::cmd_remote_pull(cli.repo.as_deref(), remote, branch, token, cli.json)
+                    .await?;
+                Ok(0)
+            }
+            Commands::Clone {
+                url,
+                dest,
+                branch,
+                remote,
+                token,
+                token_env,
+                colocate_git,
+            } => {
+                commands::cmd_clone(
+                    url,
+                    dest,
+                    branch,
+                    remote,
+                    token,
+                    token_env,
+                    colocate_git,
+                    cli.json,
+                )
+                .await?;
+                Ok(0)
+            }
         }
     })?;
 

@@ -364,4 +364,6 @@ jobs:
           sleep 25
           publish_crate loom-vcs-daemon
           sleep 25
+          publish_crate loom-vcs-server
+          sleep 25
           publish_crate loom-vcs

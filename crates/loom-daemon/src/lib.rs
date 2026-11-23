@@ -4,6 +4,7 @@ pub mod ipc;
 pub mod mcp;
 pub mod radar;
 pub mod recovery;
+pub mod remote_sync;
 pub mod viewport_mgr;
 
 use interprocess::local_socket::traits::tokio::Listener as _;
@@ -1324,7 +1325,14 @@ impl WriterActorState {
             }
         }
         let inverse_bytes = if matches!(inverse, InverseEffect::None)
-            || matches!(kind, OpKind::GitPull | OpKind::GitPush | OpKind::Gc)
+            || matches!(
+                kind,
+                OpKind::GitPull
+                    | OpKind::GitPush
+                    | OpKind::RemotePull
+                    | OpKind::RemotePush
+                    | OpKind::Gc
+            )
             || (kind != OpKind::CapsuleSeal
                 && (capsule::inverse_has_verifying_restore(&inverse)
                     || capsule::effect_transitions_to_verifying(&effect)))
@@ -1998,7 +2006,10 @@ pub(crate) fn advance_meta_for_effect(
             meta.next_edge_seq = meta.next_edge_seq.max(edge.edge_seq + 1);
         }
         StateEffect::UpsertCapsule(cap) => {
-            if matches!(op_kind, OpKind::CapsuleSeal | OpKind::GitPull) {
+            if matches!(
+                op_kind,
+                OpKind::CapsuleSeal | OpKind::GitPull | OpKind::RemotePull
+            ) {
                 meta.head_capsule_id = Some(cap.capsule_id.clone());
             }
         }

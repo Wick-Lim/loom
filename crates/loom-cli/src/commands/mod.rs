@@ -1,9 +1,14 @@
 pub mod drop;
 pub mod git;
+pub mod remote;
 pub mod seal;
 
 pub use drop::cmd_drop;
 pub use git::{cmd_git_pull, cmd_git_push};
+pub use remote::{
+    cmd_clone, cmd_remote_add, cmd_remote_list, cmd_remote_pull, cmd_remote_push,
+    cmd_remote_remove, cmd_remote_set_url, cmd_serve,
+};
 pub use seal::cmd_seal;
 
 use crate::client::{call_rpc, connect_or_autostart, discover_repo_root, subscribe_radar};

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
@@ -101,15 +102,25 @@ impl RadarConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct GitConfig {
     pub default_remote: String,
     pub notes_ref: String,
 }
 
-impl Default for GitConfig {
-    fn default() -> Self {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct RemoteConfig {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_env: Option<String>,
+}
+
+impl GitConfig {
+    pub fn default_values() -> Self {
         Self {
             default_remote: "origin".to_string(),
             notes_ref: "refs/notes/loom".to_string(),
@@ -132,6 +143,8 @@ pub struct LoomConfig {
     pub vfs: VfsConfig,
     pub radar: RadarConfig,
     pub git: GitConfig,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub remotes: BTreeMap<String, RemoteConfig>,
 }
 
 impl Default for LoomConfig {
@@ -147,7 +160,8 @@ impl Default for LoomConfig {
             max_rpc_frame_bytes: DEFAULT_MAX_RPC_FRAME_BYTES,
             vfs: VfsConfig::default(),
             radar: RadarConfig::default(),
-            git: GitConfig::default(),
+            git: GitConfig::default_values(),
+            remotes: BTreeMap::new(),
         }
     }
 }
@@ -231,6 +245,28 @@ impl LoomConfig {
             return Err(ConfigError::Validation(
                 "radar.batch_threshold_events must be >= 2".to_string(),
             ));
+        }
+        for (name, remote) in &self.remotes {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty()
+                || trimmed_name != name
+                || name.chars().any(char::is_whitespace)
+                || name.contains('/')
+                || name.contains('\\')
+            {
+                return Err(ConfigError::Validation(format!(
+                    "invalid remote name `{name}`"
+                )));
+            }
+            crate::remote::parse_remote_repo_url(&remote.url).map_err(ConfigError::Validation)?;
+            if let Some(ref env_name) = remote.token_env {
+                let t = env_name.trim();
+                if t.is_empty() || t.chars().any(char::is_whitespace) || t.contains('=') {
+                    return Err(ConfigError::Validation(format!(
+                        "invalid remote `{name}` token_env `{env_name}`"
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -336,5 +372,40 @@ debounce_ms = 0
 batch_window_ms = 200
 "#;
         assert!(LoomConfig::parse(zero_debounce).is_err());
+    }
+
+    #[test]
+    fn remotes_config_roundtrip_and_validation() {
+        let mut cfg = LoomConfig::default();
+        cfg.remotes.insert(
+            "origin".to_string(),
+            RemoteConfig {
+                url: "http://127.0.0.1:9418/team/loom".to_string(),
+                token: None,
+                token_env: Some("LOOM_REMOTE_TOKEN".to_string()),
+            },
+        );
+        let toml_text = cfg.to_toml_string().unwrap();
+        let reparsed = LoomConfig::parse(&toml_text).unwrap();
+        assert_eq!(reparsed, cfg);
+
+        let mut bad_url = cfg.clone();
+        bad_url
+            .remotes
+            .get_mut("origin")
+            .unwrap()
+            .url = "ssh://git@github.com/Wick-Lim/loom".to_string();
+        assert!(bad_url.validate().is_err());
+
+        let mut bad_name = LoomConfig::default();
+        bad_name.remotes.insert(
+            "bad/name".to_string(),
+            RemoteConfig {
+                url: "https://loom.example.com/repo".to_string(),
+                token: None,
+                token_env: None,
+            },
+        );
+        assert!(bad_name.validate().is_err());
     }
 }

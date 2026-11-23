@@ -23,6 +23,7 @@ crossterm.workspace = true
 interprocess.workspace = true
 loom-core.workspace = true
 loom-daemon.workspace = true
+loom-server.workspace = true
 loom-vfs.workspace = true
 ratatui.workspace = true
 rmp-serde.workspace = true

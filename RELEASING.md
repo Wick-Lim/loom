@@ -47,7 +47,7 @@ GitHub Actions 릴리즈 워크플로우([`.github/workflows/release.yml`](./.gi
    - **GitHub Release 생성:** 아카이브 6종 + `SHA256SUMS.txt` + 실제 해시가 반영된 `loom-vcs.rb`, `loom-vcs.scoop.json` 자동 첨부
    - **npm 배포:** 플랫폼 패키지 6종 선배포 후 루트 패키지 `loom-vcs` 배포 (`--provenance` 포함)
    - **Homebrew / Scoop:** `Wick-Lim/homebrew-tap` 및 `Wick-Lim/scoop-bucket` 자동 커밋·푸시
-   - **crates.io:** 의존성 순서(`loom-vcs-core` → `loom-vcs-vfs` → `loom-vcs-daemon` → `loom-vcs`)로 순차 배포
+   - **crates.io:** 의존성 순서(`loom-vcs-core` → `loom-vcs-vfs` → `loom-vcs-daemon` → `loom-vcs-server` → `loom-vcs`)로 순차 배포 (`loom-vcs-server`는 `loom-server` 바이너리 포함)
 4. **(선택) 저장소 내 매니페스트 동기화 & Winget PR 제출**
    - 릴리즈 완료 후 GitHub Release에서 생성된 `SHA256SUMS.txt`를 내려받아 저장소 내 매니페스트를 실제 체크섬으로 업데이트할 수 있습니다:
      ```bash

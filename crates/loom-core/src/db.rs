@@ -449,7 +449,7 @@ impl StateDb {
             let (_, lv) = later_item?;
             let later: OpLogEntry = decode_value(lv.value())?;
             if later.undone_by_op.is_none()
-                && later.kind == OpKind::GitPull
+                && matches!(later.kind, OpKind::GitPull | OpKind::RemotePull)
                 && later.viewport_id.as_deref() == Some(viewport_id)
             {
                 return Ok(true);
@@ -468,7 +468,8 @@ impl StateDb {
             let later: OpLogEntry = decode_value(lv.value())?;
             if later.undone_by_op.is_none()
                 && later.kind != OpKind::Undo
-                && (later.inverse_payload.is_some() || later.kind == OpKind::GitPull)
+                && (later.inverse_payload.is_some()
+                    || matches!(later.kind, OpKind::GitPull | OpKind::RemotePull))
                 && later.viewport_id.as_deref() == Some(viewport_id)
             {
                 return Ok(true);
@@ -487,7 +488,11 @@ impl StateDb {
             if entry.undone_by_op.is_none()
                 && matches!(
                     entry.kind,
-                    OpKind::CapsuleSeal | OpKind::GitPull | OpKind::GitPush
+                    OpKind::CapsuleSeal
+                        | OpKind::GitPull
+                        | OpKind::GitPush
+                        | OpKind::RemotePull
+                        | OpKind::RemotePush
                 )
             {
                 return Ok(true);
@@ -522,7 +527,10 @@ impl StateDb {
                             .is_some_and(|c| c.git_commit_oid.is_some());
                         let pushed_in_map =
                             git_map_table.get(format!("cap:{cid}").as_str())?.is_some();
-                        pushed_in_cap || pushed_in_map
+                        let pushed_in_remote = git_map_table
+                            .get(format!("loom_remote_cap:{cid}").as_str())?
+                            .is_some();
+                        pushed_in_cap || pushed_in_map || pushed_in_remote
                     } else {
                         false
                     };
@@ -653,7 +661,11 @@ impl StateDb {
             if entry.undone_by_op.is_none()
                 && matches!(
                     entry.kind,
-                    OpKind::CapsuleSeal | OpKind::GitPull | OpKind::GitPush
+                    OpKind::CapsuleSeal
+                        | OpKind::GitPull
+                        | OpKind::GitPush
+                        | OpKind::RemotePull
+                        | OpKind::RemotePush
                 )
             {
                 return Ok(Some(entry));
@@ -684,7 +696,8 @@ impl StateDb {
             let entry: OpLogEntry = decode_value(v.value())?;
             if entry.undone_by_op.is_none()
                 && entry.kind != OpKind::Undo
-                && (entry.inverse_payload.is_some() || entry.kind == OpKind::GitPull)
+                && (entry.inverse_payload.is_some()
+                    || matches!(entry.kind, OpKind::GitPull | OpKind::RemotePull))
                 && entry.viewport_id.as_deref() == Some(viewport_id)
             {
                 return Ok(Some(entry));

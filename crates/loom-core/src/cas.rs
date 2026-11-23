@@ -120,6 +120,53 @@ impl CasStore {
         Ok(plaintext)
     }
 
+    pub fn get_raw_compressed(&self, hash: &Blake3Hash) -> Result<Vec<u8>, CasError> {
+        let obj_path = self.object_path(hash);
+        match std::fs::read(&obj_path) {
+            Ok(bytes) => Ok(bytes),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(CasError::NotFound(*hash)),
+            Err(e) => Err(CasError::Io(e)),
+        }
+    }
+
+    pub fn put_verified_compressed(
+        &self,
+        expected_hash: &Blake3Hash,
+        zstd_bytes: &[u8],
+    ) -> Result<bool, CasError> {
+        let obj_path = self.object_path(expected_hash);
+        if obj_path.is_file() {
+            return Ok(false);
+        }
+
+        let plaintext = zstd::stream::decode_all(std::io::Cursor::new(zstd_bytes))?;
+        let actual = Blake3Hash::from_bytes(&plaintext);
+        if actual != *expected_hash {
+            return Err(CasError::HashMismatch {
+                expected: *expected_hash,
+                actual,
+            });
+        }
+
+        let shard_dir = obj_path
+            .parent()
+            .expect("CAS object path always has shard parent");
+        std::fs::create_dir_all(shard_dir)?;
+
+        let mut tmp = NamedTempFile::new_in(shard_dir)?;
+        tmp.write_all(zstd_bytes)?;
+        tmp.as_file().sync_data()?;
+
+        match tmp.persist_noclobber(&obj_path) {
+            Ok(_) => Ok(true),
+            Err(err) if obj_path.is_file() => {
+                drop(err);
+                Ok(false)
+            }
+            Err(err) => Err(CasError::Persist(err)),
+        }
+    }
+
     pub fn contains(&self, hash: &Blake3Hash) -> bool {
         self.object_path(hash).is_file()
     }
@@ -528,5 +575,26 @@ mod tests {
                 Err(CasError::InvalidChunkSize(_))
             ));
         }
+    }
+
+    #[test]
+    fn cas_raw_compressed_and_verified_put_roundtrip() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+        let src = CasStore::open_default(src_dir.path().join("cas")).unwrap();
+        let dst = CasStore::open_default(dst_dir.path().join("cas")).unwrap();
+
+        let payload = b"loom native remote zstd payload";
+        let hash = src.put_bytes(payload).unwrap();
+        let raw_zst = src.get_raw_compressed(&hash).unwrap();
+
+        assert!(dst.put_verified_compressed(&hash, &raw_zst).unwrap());
+        assert!(!dst.put_verified_compressed(&hash, &raw_zst).unwrap());
+        assert_eq!(dst.get_bytes(&hash).unwrap(), payload);
+
+        let wrong_hash = Blake3Hash::from_bytes(b"different content");
+        let err = dst.put_verified_compressed(&wrong_hash, &raw_zst).unwrap_err();
+        assert!(matches!(err, CasError::HashMismatch { .. }));
+        assert!(!dst.contains(&wrong_hash));
     }
 }

@@ -35,6 +35,7 @@ loom-vfs.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 redb.workspace = true
+reqwest.workspace = true
 rmcp.workspace = true
 rmp-serde.workspace = true
 schemars.workspace = true

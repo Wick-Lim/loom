@@ -697,6 +697,8 @@ pub enum OpKind {
     NegativeEdgeRecord,
     GitPush,
     GitPull,
+    RemotePush,
+    RemotePull,
     Undo,
     Gc,
 }
@@ -713,6 +715,8 @@ impl fmt::Display for OpKind {
             Self::NegativeEdgeRecord => "NegativeEdgeRecord",
             Self::GitPush => "GitPush",
             Self::GitPull => "GitPull",
+            Self::RemotePush => "RemotePush",
+            Self::RemotePull => "RemotePull",
             Self::Undo => "Undo",
             Self::Gc => "Gc",
         };
