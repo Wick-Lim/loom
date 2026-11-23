@@ -4,7 +4,7 @@
 
 **`loom-vcs`**(Project Loom)는 수십 개의 AI 코딩 에이전트(`agy`, Claude Code, OpenCode 등)가 동일 저장소를 동시에 수정할 때 발생하는 작업 공간 격리 비용, 락 경합, 텍스트 라인 기반 병합 충돌을 제거하기 위해 설계된 Rust 기반 차세대 로컬 우선(Local-First) 버전 관리 시스템입니다.
 
-**OS 네이티브 CoW(Copy-on-Write) 뷰포트**, **Tree-sitter 기반 가환 구문 패치(Commutative CST Patch)**, **실시간 추측성 병합 레이더**, **인과 검증 캡슐 및 실패 기억 원장**, **순수 Rust(`gix`) 양방향 Git 투영 계층**을 단일 워크스페이스(`loom` Thin CLI + `loomd` Single-Writer Daemon & MCP Server)로 통합했습니다.
+**OS 네이티브 CoW(Copy-on-Write) 뷰포트**, **Tree-sitter 기반 가환 구문 패치(Commutative CST Patch)**, **실시간 추측성 병합 레이더**, **인과 검증 캡슐 및 실패 기억 원장**, **순수 Rust(`gix`) 양방향 Git 투영 계층**, **Loom 네이티브 원격 서버(`loom-server`) 및 무손실 HTTP 동기화**를 단일 워크스페이스(`loom` Thin CLI + `loomd` Single-Writer Daemon & MCP Server + `loom-server` Native Remote Server)로 통합했습니다.
 
 ---
 
@@ -57,7 +57,11 @@ winget install WickLim.LoomVcs
 ### Cargo (crates.io / 소스 빌드)
 
 ```bash
+# 통합 CLI (`loom`에 내장 `loomd` 데몬 및 `loom serve` 원격 서버 포함)
 cargo install loom-vcs
+
+# 선택 사항: 독립 원격 서버 전용 바이너리 (`loom-server`)만 별도 설치
+cargo install loom-vcs-server
 ```
 
 ---
@@ -98,6 +102,11 @@ cargo install loom-vcs
 - **Push (`loom git push`):** 봉인된 `CausalCapsule`을 표준 Git 커밋으로 투영하고 커밋 트레일러(`Loom-Capsule-Id`, `Loom-Agent`, `Loom-Verified`) 및 `refs/notes/loom` 네임스페이스의 Git Notes(`CausalCapsule` / `NegativeEdge` 메타데이터)를 함께 전송합니다.
 - **Pull (`loom git pull`):** 원격 Git 커밋을 Tree-sitter 디퍼로 역산 흡수하고, `refs/notes/loom`의 `NegativeEdge`를 로컬 `state.redb`로 복원한 뒤 활성 뷰포트를 리베이스합니다.
 
+### 6. Loom 네이티브 원격 서버 및 무손실 동기화 (`loom-vcs-server`)
+- Git 투영으로 변환하지 않고 **Zstd-3 BLAKE3 CAS 블롭**, **`CausalCapsule` DAG**, **`AstPatchRecord`**, **`VerificationProof`**, **`NegativeEdge` 실패 기억**을 그대로 HTTP로 저장·동기화합니다. (`reqwest` + `rustls-tls-webpki-roots` + `ring` 순수 Rust TLS 사용)
+- **증분 중복 제거 & 무결성 검증:** `POST /v1/repos/<slug>/cas/has` 프리플라이트로 누락된 CAS 해시만 필터링하고, Zstd-3 프레임을 재압축 없이 `PUT`/`GET` 전송하며 서버·클라이언트 양측에서 BLAKE3 해시 및 CAS 완결성을 검증합니다.
+- **동시성 및 안전 장치:** 저장소별 락과 Fast-Forward 검증(분기 시 `409 Conflict`, 필요 시 `--force`), `constant_time_eq` 기반 Bearer 토큰 인증, `loom pull` 시 3-way 병합 및 활성 뷰포트 자동 리베이스 + 레이더 재평가를 지원합니다.
+
 ---
 
 ## 아키텍처 개요
@@ -122,9 +131,10 @@ cargo install loom-vcs
 +------------------------------------------------------+----------------------+
                                                        v
 +-----------------------------------------------------------------------------+
-|                     Storage & Git Projection Layer (.loom/)                 |
+|               Storage, Git Projection & Native Remote Layer (.loom/)        |
 |  [.loom/wal/] BLAKE3 WAL  |  [.loom/state.redb] 8 ACID Tables & OpLog       |
 |  [.loom/cas/] Zstd-3 CAS  |  [gix Git Bridge] <-> .git & refs/notes/loom    |
+|  [Native Remote Sync (reqwest/rustls)] <-> loom-server (HTTP CAS + Ledger)  |
 +-----------------------------------------------------------------------------+
 ```
 
@@ -150,7 +160,7 @@ cargo install loom-vcs
 project-root/
 ├── .git/                    # 표준 Git 저장소 (--colocate-git 사용 시 공존)
 └── .loom/
-    ├── config.toml          # 데몬, VFS, 레이더, Git 설정
+    ├── config.toml          # 데몬, VFS, 레이더, Git, [remotes.*] 네이티브 원격 설정
     ├── daemon.sock          # 로컬 IPC 소켓 / Windows Named Pipe 디스크립터
     ├── state.redb           # ACID 스토어 (viewports, patches, capsules, symbol_provides, symbol_consumes, negative_index, op_log, git_map)
     ├── wal/                 # Append-only BLAKE3 체크섬 로그 세그먼트
@@ -164,7 +174,7 @@ project-root/
 
 ### 요구 사항
 - **Rust 툴체인:** Rust 2024 Edition 지원 `rustc` / `cargo`
-- 별도 `cmake` 설치 불필요 (`zstd` 기본 C 번들 피처 사용)
+- 별도 `cmake` / OpenSSL 설치 불필요 (`zstd` 기본 C 번들 피처 및 순수 Rust TLS `rustls`/`ring` 사용)
 
 ### 빌드
 
@@ -172,8 +182,11 @@ project-root/
 # 전체 워크스페이스 빌드
 cargo build --workspace
 
-# 릴리즈 CLI 바이너리 빌드 (loom + 내장 __daemon)
+# 릴리즈 CLI 바이너리 빌드 (loom + 내장 __daemon + loom serve / loom-server 멀티콜)
 cargo build --release --package loom-vcs --bin loom
+
+# 선택 사항: 독립 원격 서버 전용 바이너리 빌드 (loom-server)
+cargo build --release --package loom-vcs-server --bin loom-server
 ```
 
 ### 기본 워크플로우 예시
@@ -269,6 +282,41 @@ loom --repo /path/to/repo mcp serve --viewport auth-refactor --http 127.0.0.1:87
 
 ---
 
+## Loom 네이티브 원격 서버 (`loom serve` / `loom-server`)
+
+### 네이티브 원격 vs Git 브리지
+
+| 구분 | `loom push` / `loom pull` / `loom clone` | `loom git push` / `loom git pull` |
+| :--- | :--- | :--- |
+| **원격 대상** | `loom serve` / `loom-server` HTTP 원격 | 표준 Git 저장소 (`gitoxide`) |
+| **전송 단위** | Zstd-3 CAS 블롭 + `CausalCapsule` DAG + `AstPatchRecord` + `VerificationProof` + `NegativeEdge` | Git 커밋 + `refs/notes/loom` 노트 투영 |
+| **저장 방식** | `.git` 변환 없이 Loom 원본 구조 무손실 저장 | Git 객체(`.git`)로 변환 저장 |
+
+### 서버 실행 및 인증 옵션
+
+| 플래그 | 환경 변수 | 기본값 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `--bind <ADDR>` | `LOOM_SERVER_BIND` | `127.0.0.1:9418` | 수신 대기 TCP 주소 |
+| `--data-dir <DIR>` | `LOOM_SERVER_DATA_DIR` | `./loom-data` | 원격 저장소(CAS · `state.redb` · `refs`) 저장 경로 |
+| `--token <TOKEN>` | `LOOM_SERVER_TOKEN` | *(없음)* | `/v1/*` Bearer 인증 토큰 (반복 지정 또는 쉼표 구분 지원) |
+| `--no-auth` | — | `false` | 인증 비활성화 (미지정 시 토큰 없이 기동 거부) |
+| `--no-auto-create` | — | `false` | 첫 `push` 시 미생성 저장소 자동 초기화 비활성화 |
+
+- **클라이언트 Bearer 토큰 해석 우선순위:** `--token` 플래그 → `LOOM_TOKEN` → `LOOM_REMOTE_TOKEN` → `.loom/config.toml`의 `remotes.<name>.token_env` → `remotes.<name>.token` (`loom remote list` 및 `op_log` 요약에는 원문 토큰이 노출되지 않습니다.)
+
+### HTTP 엔드포인트 (`/v1`)
+
+| 엔드포인트 | 역할 |
+| :--- | :--- |
+| `GET /healthz` | 서버 헬스 체크 |
+| `GET /v1/repos/<slug>/info` | 원격 저장소 정보 및 브랜치 레퍼런스 조회 |
+| `POST /v1/repos/<slug>/cas/has` | 누락된 BLAKE3 CAS 해시 프리플라이트 질의 |
+| `PUT` / `GET /v1/repos/<slug>/cas/<hex>` | `application/zstd` CAS 블롭 해시 검증 업로드·다운로드 |
+| `POST /v1/repos/<slug>/push` | Fast-forward 검증(`409`) 및 CAS 완결성 확인(`422`) 후 원자적 원격 반영 (`--force` 지원) |
+| `POST /v1/repos/<slug>/pull` | 증분 캡슐 · 패치 · CAS · `NegativeEdge` 수신 (분기 시 3-way 병합 및 활성 뷰포트 리베이스) |
+
+---
+
 ## 설정 (`.loom/config.toml`)
 
 ```toml
@@ -292,6 +340,10 @@ ignore_dirs = [".loom", ".git", "target", "node_modules", ".venv", "dist", "buil
 [git]
 default_remote = "origin"
 notes_ref = "refs/notes/loom"
+
+[remotes.origin]
+url = "http://127.0.0.1:9418/my-repo"
+token_env = "LOOM_TOKEN"
 ```
 
 ---
@@ -304,7 +356,7 @@ notes_ref = "refs/notes/loom"
 # 정적 분석 (경고 0건 기준)
 cargo clippy --workspace --all-targets -- -D warnings
 
-# 워크스페이스 단위·통합 테스트 (284 tests, agy CLI 연동 포함)
+# 워크스페이스 단위·통합 테스트 (294 tests, loom-server HTTP · cli_remote · agy CLI 연동 포함)
 cargo test --workspace
 
 # Opaque-Box E2E 테스트 스위트 (Tier 0~4, 283 tests)
