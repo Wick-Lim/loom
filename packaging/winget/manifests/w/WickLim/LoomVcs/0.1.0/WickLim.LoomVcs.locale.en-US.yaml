@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: WickLim.LoomVcs
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Wick-Lim
+PublisherUrl: https://github.com/Wick-Lim
+PublisherSupportUrl: https://github.com/Wick-Lim/loom/issues
+PackageName: Project Loom
+PackageUrl: https://github.com/Wick-Lim/loom
+License: MIT OR Apache-2.0
+LicenseUrl: https://github.com/Wick-Lim/loom/blob/main/LICENSE-MIT
+ShortDescription: Multi-agent native, local-first version control system (loom CLI + loomd daemon)
+Moniker: loom
+Tags:
+  - vcs
+  - git
+  - ai-agents
+  - mcp
+  - tree-sitter
+ReleaseNotesUrl: https://github.com/Wick-Lim/loom/releases/tag/v0.1.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

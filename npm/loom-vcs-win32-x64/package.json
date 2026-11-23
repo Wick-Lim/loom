@@ -1,0 +1,21 @@
+{
+  "name": "loom-vcs-win32-x64",
+  "version": "0.1.0",
+  "description": "Prebuilt Windows x64 binary for loom-vcs",
+  "license": "MIT OR Apache-2.0",
+  "author": "Wick-Lim <wicklim90@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wick-Lim/loom.git"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ],
+  "preferUnplugged": true
+}

@@ -1,8 +1,16 @@
 [package]
-name = "loom-cli"
+name = "loom-vcs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Multi-agent native, local-first version control system CLI & TUI (Project Loom)"
 
 [[bin]]
 name = "loom"

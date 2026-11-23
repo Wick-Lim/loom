@@ -48,7 +48,7 @@ pub fn render_markdown_report(r: &BenchmarkReport) -> String {
     );
     let _ = writeln!(md);
     let _ = writeln!(md, "```powershell");
-    let _ = writeln!(md, "cargo build --release --package loom-cli --bin loom");
+    let _ = writeln!(md, "cargo build --release --package loom-vcs --bin loom");
     let _ = writeln!(
         md,
         "cargo run --release --manifest-path benches/Cargo.toml -- --loom-bin target\\release\\loom.exe --report BENCHMARK_REPORT.md"

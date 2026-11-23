@@ -1,8 +1,19 @@
 [package]
-name = "loom-core"
+name = "loom-vcs-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Core storage, BLAKE3 WAL, Zstd CAS, Tree-sitter CST diff/merge engine, and CRDT support for loom-vcs"
+
+[lib]
+name = "loom_core"
 
 [dependencies]
 anyhow.workspace = true

@@ -1,0 +1,45 @@
+{
+  "name": "loom-vcs",
+  "version": "0.1.0",
+  "description": "Multi-agent native, local-first version control system (Project Loom CLI & daemon)",
+  "license": "MIT OR Apache-2.0",
+  "author": "Wick-Lim <wicklim90@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wick-Lim/loom.git"
+  },
+  "homepage": "https://github.com/Wick-Lim/loom#readme",
+  "bugs": {
+    "url": "https://github.com/Wick-Lim/loom/issues"
+  },
+  "keywords": [
+    "vcs",
+    "git",
+    "multi-agent",
+    "ai-agents",
+    "mcp",
+    "tree-sitter",
+    "loom"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "loom": "./bin/loom.cjs",
+    "loom-vcs": "./bin/loom.cjs"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "optionalDependencies": {
+    "loom-vcs-darwin-arm64": "0.1.0",
+    "loom-vcs-darwin-x64": "0.1.0",
+    "loom-vcs-linux-x64": "0.1.0",
+    "loom-vcs-linux-arm64": "0.1.0",
+    "loom-vcs-win32-x64": "0.1.0",
+    "loom-vcs-win32-arm64": "0.1.0"
+  }
+}

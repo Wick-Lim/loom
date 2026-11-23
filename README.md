@@ -1,16 +1,70 @@
-# Project Loom
+# loom-vcs (Project Loom)
 
 **Multi-Agent Native, Local-First Version Control System**
 
-**Loom**은 수십 개의 AI 코딩 에이전트(`agy`, Claude Code, OpenCode 등)가 동일 저장소를 동시에 수정할 때 발생하는 작업 공간 격리 비용, 락 경합, 텍스트 라인 기반 병합 충돌을 제거하기 위해 설계된 Rust 기반 차세대 로컬 우선(Local-First) 버전 관리 시스템입니다.
+**`loom-vcs`**(Project Loom)는 수십 개의 AI 코딩 에이전트(`agy`, Claude Code, OpenCode 등)가 동일 저장소를 동시에 수정할 때 발생하는 작업 공간 격리 비용, 락 경합, 텍스트 라인 기반 병합 충돌을 제거하기 위해 설계된 Rust 기반 차세대 로컬 우선(Local-First) 버전 관리 시스템입니다.
 
 **OS 네이티브 CoW(Copy-on-Write) 뷰포트**, **Tree-sitter 기반 가환 구문 패치(Commutative CST Patch)**, **실시간 추측성 병합 레이더**, **인과 검증 캡슐 및 실패 기억 원장**, **순수 Rust(`gix`) 양방향 Git 투영 계층**을 단일 워크스페이스(`loom` Thin CLI + `loomd` Single-Writer Daemon & MCP Server)로 통합했습니다.
 
 ---
 
+## 설치 (Installation)
+
+> **안내:** 패키지 레지스트리 이름 충돌로 인해 패키지명은 `loom-vcs`이며, 설치 후 실행 커맨드는 **`loom`**입니다. (`npx loom-vcs`는 설치 없이 즉시 실행 가능하며, `loom-vcs` 명령어 별칭도 함께 제공됩니다.)
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install wick-lim/tap/loom-vcs
+```
+
+### npm / npx / pnpm / Bun (무설치 즉시 실행 & 글로벌 설치)
+
+`optionalDependencies`로 플랫폼별 네이티브 바이너리만 받아 `postinstall` 스크립트 없이 동작합니다. (`macOS arm64/x64`, `Linux x64/arm64`, `Windows x64/arm64`)
+
+```bash
+# 즉시 실행
+npx loom-vcs --help
+bunx loom-vcs --help
+pnpm dlx loom-vcs --help
+
+# 글로벌 설치
+npm install -g loom-vcs
+```
+
+### Shell / PowerShell 원라이너 (GitHub Releases 바이너리 + SHA256 검증)
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/Wick-Lim/loom/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/Wick-Lim/loom/main/scripts/install.ps1 | iex
+```
+
+### Windows 패키지 매니저 (Scoop / Winget)
+
+```powershell
+# Scoop
+scoop install https://raw.githubusercontent.com/Wick-Lim/loom/main/packaging/scoop/loom-vcs.json
+
+# Winget (커뮤니티 저장소 등록 후)
+winget install WickLim.LoomVcs
+```
+
+### Cargo (crates.io / 소스 빌드)
+
+```bash
+cargo install loom-vcs
+```
+
+---
+
 ## 핵심 기능
 
-### 1. OS 네이티브 CoW 제로카피 뷰포트 (`loom-vfs`)
+### 1. OS 네이티브 CoW 제로카피 뷰포트 (`loom-vcs-vfs`)
 - 에이전트 세션마다 `.loom/viewports/` 하위에 격리된 작업 디렉터리를 생성하고 수명주기(`Spawned` → `Active` → `Verifying` → `Sealed` / `Dropped` → `GC_Pending`)를 관리합니다.
 - 의존성 및 빌드 캐시(`target/`, `node_modules/`, `.venv/`)의 물리 블록은 공유하면서 컴파일러 락 파일(`.cargo-lock`, `*.lock`, `*.lck`)과 증분 빌드 디렉터리(`incremental/`)는 세션별로 격리합니다.
 - **크로스 플랫폼 드라이버 지원:**
@@ -18,7 +72,7 @@
   - **Linux:** Reflink `ioctl(FICLONE)` 및 유저스페이스 `fuse-overlayfs` 자동 폴백
   - **Windows:** ReFS 블록 클로닝(`FSCTL_DUPLICATE_EXTENTS_TO_FILE`), 동적 로드(`LoadLibraryW`) 기반 `ProjectedFSLib.dll`(ProjFS), 및 미지원 NTFS 환경용 `WindowsNtfsFallback`(공용 캐시 제로카피 하드링크 + 편집 파일 독립 복사)
 
-### 2. Tree-sitter 4개 언어 가환 구문 패치 엔진 (`loom-core`)
+### 2. Tree-sitter 4개 언어 가환 구문 패치 엔진 (`loom-vcs-core`)
 - **지원 언어:** Rust, TypeScript, Go, Python (4개 언어 내장 Tree-sitter 문법)
 - **CST + Leading Trivia 보존:** 선언 노드 직전의 주석, Docstring, 어트리뷰트(`#[derive(...)]`), 데코레이터를 노드의 원자적 일부로 함께 보존합니다.
 - **줄 번호 독립 주소 지정 (`NodeAnchor`):** `[logical_file_id + symbol_fqn + syntax_kind_id + decl_header_hash]` 조합으로 식별하므로 파일 상단에 코드가 대량 추가되어도 하단 심볼 주소가 깨지지 않습니다.
@@ -27,7 +81,7 @@
   - 동일 노드 본문 동시 수정은 `StructuralConflict`, 시그니처 변경과 외부 호출 규격 불일치는 `SemanticConflict` 1급 충돌 객체로 생성합니다.
 - **비코드 / 바이너리 폴백:** `.json`, `.yaml`, `.md` 파일은 `automerge` 기반 Sequence CRDT로, 바이너리 파일은 BLAKE3 CAS 청크 해시로 처리합니다.
 
-### 3. 실시간 추측성 병합 레이더 & 내장 MCP 서버 (`loom-daemon`, `loom-cli`)
+### 3. 실시간 추측성 병합 레이더 & 내장 MCP 서버 (`loom-vcs-daemon`, `loom-vcs`)
 - `notify` 파일 워처(기본 15ms 디바운싱, 대량 쓰기 감지 시 배치 모드 자동 전환)가 활성 뷰포트 변경을 포착해 증분 파싱 및 `tags.scm` 기반 `provides`/`consumes` 심볼 계약을 추출합니다.
 - 작성 중인 문법 오류(`ERROR` 노드)는 `PENDING_SYNTAX` 상태로 유보하여 거짓 양성(False Positive) 충돌 경보를 방지합니다.
 - 모든 활성 뷰포트 간 인메모리 N×N 섀도우 병합(`GREEN` / `YELLOW` / `RED`) 결과를 계산해 MCP 연결 세션에 `notifications/loom/radar_conflict` 알림을 푸시하고, 각 뷰포트 루트의 `.loom/RADAR_STATUS.json`을 원자적으로 갱신합니다.
@@ -78,13 +132,16 @@
 
 | 경로 | 설명 |
 | :--- | :--- |
-| `crates/loom-core` | 핵심 데이터 모델, `config.toml`, BLAKE3 WAL, Zstd-3 CAS, `redb` ACID 스토어, 4개 언어 Tree-sitter CST 엔진, `automerge` CRDT, RPC 프레임 |
-| `crates/loom-vfs` | `ViewportDriver` 트레이트 및 OS별 CoW 드라이버 (`macos.rs`, `linux.rs`, `windows.rs`) |
-| `crates/loom-daemon` | 단일-라이터 `loomd` 데몬, 크래시 복구, 뷰포트 매니저, 실시간 `notify` 레이더, `rmcp` MCP 서버, 캡슐/실패 기억, `gix` Git 브리지 |
-| `crates/loom-cli` | `loom` 초경량 CLI(멀티콜 `loomd` 진입 지원) 및 `ratatui` 레이더 TUI |
+| `crates/loom-core` (`loom-vcs-core`) | 핵심 데이터 모델, `config.toml`, BLAKE3 WAL, Zstd-3 CAS, `redb` ACID 스토어, 4개 언어 Tree-sitter CST 엔진, `automerge` CRDT, RPC 프레임 |
+| `crates/loom-vfs` (`loom-vcs-vfs`) | `ViewportDriver` 트레이트 및 OS별 CoW 드라이버 (`macos.rs`, `linux.rs`, `windows.rs`) |
+| `crates/loom-daemon` (`loom-vcs-daemon`) | 단일-라이터 `loomd` 데몬, 크래시 복구, 뷰포트 매니저, 실시간 `notify` 레이더, `rmcp` MCP 서버, 캡슐/실패 기억, `gix` Git 브리지 |
+| `crates/loom-cli` (`loom-vcs`) | `loom` 초경량 CLI(멀티콜 `loomd` 진입 지원) 및 `ratatui` 레이더 TUI |
+| `npm/` | `loom-vcs` 루트 패키지 및 6개 플랫폼별 네이티브 바이너리 npm 패키지 |
+| `Formula/` · `packaging/` · `scripts/` | Homebrew Formula, Scoop/Winget 매니페스트, 매니페스트 생성기 및 Shell/PowerShell 설치 스크립트 |
 | `e2e-suite/` | 독립 Opaque-Box E2E 테스트 스위트 (Tier 0~4, 283개 테스트) |
 | `benches/` | 독립 멀티 에이전트 성능 SLA 벤치마크 하네스 (`loom-bench`) |
 | [`BENCHMARK_REPORT.md`](./BENCHMARK_REPORT.md) | Windows 11 호스트 10-뷰포트 성능 SLA 실측 리포트 |
+| [`RELEASING.md`](./RELEASING.md) | 멀티 채널 배포 준비(토큰/Tap 설정) 및 릴리즈 절차 가이드 |
 
 ### `.loom/` 디렉터리 레이아웃
 
@@ -102,7 +159,7 @@ project-root/
 
 ---
 
-## 빌드 및 빠른 시작
+## 소스 빌드 및 빠른 시작
 
 ### 요구 사항
 - **Rust 툴체인:** Rust 2024 Edition 지원 `rustc` / `cargo`
@@ -115,7 +172,7 @@ project-root/
 cargo build --workspace
 
 # 릴리즈 CLI 바이너리 빌드 (loom + 내장 __daemon)
-cargo build --release --package loom-cli --bin loom
+cargo build --release --package loom-vcs --bin loom
 ```
 
 ### 기본 워크플로우 예시
@@ -240,8 +297,12 @@ cargo test --workspace
 # Opaque-Box E2E 테스트 스위트 (Tier 0~4, 283 tests)
 cargo test --manifest-path e2e-suite/Cargo.toml -- --test-threads=1
 
+# 패키징 및 인스톨러 검증
+node --test scripts/test-manifests.mjs
+node --test npm/loom-vcs/test/launcher.test.mjs
+
 # Windows 10-뷰포트 SLA 벤치마크 실행
-cargo build --release --package loom-cli --bin loom
+cargo build --release --package loom-vcs --bin loom
 cargo run --release --manifest-path benches/Cargo.toml -- --loom-bin target/release/loom --report BENCHMARK_REPORT.md
 ```
 
@@ -260,4 +321,4 @@ cargo run --release --manifest-path benches/Cargo.toml -- --loom-bin target/rele
 
 ## 라이선스
 
-본 프로젝트는 `MIT OR Apache-2.0` 듀얼 라이선스로 배포됩니다.
+본 프로젝트는 [`MIT`](./LICENSE-MIT) OR [`Apache-2.0`](./LICENSE-APACHE) 듀얼 라이선스로 배포됩니다.

@@ -2495,7 +2495,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
-name = "loom-cli"
+name = "loom-vcs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2503,9 +2503,9 @@ dependencies = [
  "crossterm",
  "gix",
  "interprocess",
- "loom-core",
- "loom-daemon",
- "loom-vfs",
+ "loom-vcs-core",
+ "loom-vcs-daemon",
+ "loom-vcs-vfs",
  "ratatui",
  "rmp-serde",
  "serde",
@@ -2521,7 +2521,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "loom-core"
+name = "loom-vcs-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2549,7 +2549,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "loom-daemon"
+name = "loom-vcs-daemon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2562,8 +2562,8 @@ dependencies = [
  "hyper",
  "hyper-util",
  "interprocess",
- "loom-core",
- "loom-vfs",
+ "loom-vcs-core",
+ "loom-vcs-vfs",
  "notify",
  "notify-debouncer-full",
  "redb",
@@ -2586,12 +2586,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "loom-vfs"
+name = "loom-vcs-vfs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "libc",
- "loom-core",
+ "loom-vcs-core",
  "rustix",
  "serde",
  "tempfile",

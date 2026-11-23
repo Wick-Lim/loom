@@ -62,7 +62,7 @@ fn parse_args() -> anyhow::Result<CliArgs> {
     };
     anyhow::ensure!(
         abs_bin.is_file(),
-        "loom binary not found at {} (build with `cargo build --release --package loom-cli --bin loom`)",
+        "loom binary not found at {} (build with `cargo build --release --package loom-vcs --bin loom`)",
         abs_bin.display()
     );
 

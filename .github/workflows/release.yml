@@ -1,0 +1,367 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            ext: tar.gz
+            bin: loom
+            npm_pkg: loom-vcs-darwin-arm64
+            macosx_deployment_target: "11.0"
+          - target: x86_64-apple-darwin
+            os: macos-14
+            ext: tar.gz
+            bin: loom
+            npm_pkg: loom-vcs-darwin-x64
+            macosx_deployment_target: "11.0"
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            ext: tar.gz
+            bin: loom
+            npm_pkg: loom-vcs-linux-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            ext: tar.gz
+            bin: loom
+            npm_pkg: loom-vcs-linux-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: zip
+            bin: loom.exe
+            npm_pkg: loom-vcs-win32-x64
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+            ext: zip
+            bin: loom.exe
+            npm_pkg: loom-vcs-win32-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve Release Tag & Verify Crate Version
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          PKG_VER="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)"
+          if [ "$VER" != "$PKG_VER" ]; then
+            echo "Tag version ($VER) does not match Cargo.toml workspace version ($PKG_VER)" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "archive=loom-vcs-${TAG}-${{ matrix.target }}.${{ matrix.ext }}" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Configure macOS deployment target
+        if: runner.os == 'macOS'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=${{ matrix.macosx_deployment_target }}" >> "$GITHUB_ENV"
+      - name: Build Release Binary
+        run: cargo build --release --locked --package loom-vcs --bin loom --target ${{ matrix.target }}
+      - name: Package Archive (Unix)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.bin }}"
+          chmod 0755 "dist/${{ matrix.bin }}"
+          cp README.md LICENSE-MIT LICENSE-APACHE dist/
+          tar -C dist -czf "${{ steps.meta.outputs.archive }}" loom README.md LICENSE-MIT LICENSE-APACHE
+      - name: Package Archive (Windows)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.bin }}" "dist\${{ matrix.bin }}"
+          Copy-Item "README.md", "LICENSE-MIT", "LICENSE-APACHE" "dist\"
+          Compress-Archive -Path "dist\*" -DestinationPath "${{ steps.meta.outputs.archive }}" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ steps.meta.outputs.archive }}
+
+  release:
+    name: Create GitHub Release & Manifests
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve Tag & Version
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+      - name: Compute SHA256SUMS.txt & Generate Manifests
+        run: |
+          (cd artifacts && sha256sum loom-vcs-* > SHA256SUMS.txt)
+          cat artifacts/SHA256SUMS.txt
+          node scripts/generate-manifests.mjs \
+            --version "${{ steps.meta.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --checksums artifacts/SHA256SUMS.txt
+          cp Formula/loom-vcs.rb artifacts/loom-vcs.rb
+          cp packaging/scoop/loom-vcs.json artifacts/loom-vcs.scoop.json
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "Project Loom ${{ steps.meta.outputs.tag }}"
+          generate_release_notes: true
+          files: |
+            artifacts/loom-vcs-*
+            artifacts/SHA256SUMS.txt
+            artifacts/loom-vcs.rb
+            artifacts/loom-vcs.scoop.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-manifests
+          path: |
+            Formula/loom-vcs.rb
+            packaging/scoop/loom-vcs.json
+            packaging/winget/
+
+  publish-npm:
+    name: Publish npm Packages
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Required Secret
+        id: check
+        env:
+          SECRET_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$SECRET_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "NPM_TOKEN is not configured; skipping npm publish."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+      - name: Stage Platform Binaries & Sync Versions
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          VER="${{ needs.release.outputs.version }}"
+          TAG="${{ needs.release.outputs.tag }}"
+          node scripts/generate-manifests.mjs --version "$VER" --sync-npm-only
+
+          unpack_tar() {
+            archive="$1"
+            pkg="$2"
+            mkdir -p "tmp_$pkg"
+            tar -xzf "artifacts/$archive" -C "tmp_$pkg"
+            cp "tmp_$pkg/loom" "npm/$pkg/bin/loom"
+            chmod 0755 "npm/$pkg/bin/loom"
+            rm -f "npm/$pkg/bin/.gitkeep"
+          }
+          unpack_zip() {
+            archive="$1"
+            pkg="$2"
+            mkdir -p "tmp_$pkg"
+            unzip -q "artifacts/$archive" -d "tmp_$pkg"
+            cp "tmp_$pkg/loom.exe" "npm/$pkg/bin/loom.exe"
+            rm -f "npm/$pkg/bin/.gitkeep"
+          }
+
+          unpack_tar "loom-vcs-${TAG}-aarch64-apple-darwin.tar.gz" "loom-vcs-darwin-arm64"
+          unpack_tar "loom-vcs-${TAG}-x86_64-apple-darwin.tar.gz" "loom-vcs-darwin-x64"
+          unpack_tar "loom-vcs-${TAG}-x86_64-unknown-linux-gnu.tar.gz" "loom-vcs-linux-x64"
+          unpack_tar "loom-vcs-${TAG}-aarch64-unknown-linux-gnu.tar.gz" "loom-vcs-linux-arm64"
+          unpack_zip "loom-vcs-${TAG}-x86_64-pc-windows-msvc.zip" "loom-vcs-win32-x64"
+          unpack_zip "loom-vcs-${TAG}-aarch64-pc-windows-msvc.zip" "loom-vcs-win32-arm64"
+
+          cp README.md LICENSE-MIT LICENSE-APACHE npm/loom-vcs/
+      - name: Publish Platform & Root npm Packages
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg in \
+            loom-vcs-darwin-arm64 \
+            loom-vcs-darwin-x64 \
+            loom-vcs-linux-x64 \
+            loom-vcs-linux-arm64 \
+            loom-vcs-win32-x64 \
+            loom-vcs-win32-arm64; do
+            npm publish "./npm/$pkg" --access public --provenance
+          done
+          npm publish "./npm/loom-vcs" --access public --provenance
+
+  publish-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Required Secret
+        id: check
+        env:
+          SECRET_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -n "$SECRET_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "HOMEBREW_TAP_GITHUB_TOKEN is not configured; skipping Homebrew tap update."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          name: generated-manifests
+          path: manifests
+      - name: Push Formula to Wick-Lim/homebrew-tap
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/Wick-Lim/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp manifests/Formula/loom-vcs.rb tap/Formula/loom-vcs.rb
+          cd tap
+          git config user.name "Wick-Lim"
+          git config user.email "wicklim90@gmail.com"
+          git add Formula/loom-vcs.rb
+          if git diff --cached --quiet; then
+            echo "Homebrew formula unchanged."
+            exit 0
+          fi
+          git commit -m "chore(loom-vcs): update formula to ${TAG}"
+          git push
+
+  publish-scoop:
+    name: Update Scoop Bucket
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Required Secret
+        id: check
+        env:
+          SECRET_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+        run: |
+          if [ -n "$SECRET_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "SCOOP_BUCKET_GITHUB_TOKEN is not configured; skipping Scoop bucket update."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.enabled == 'true'
+        with:
+          name: generated-manifests
+          path: manifests
+      - name: Push Manifest to Wick-Lim/scoop-bucket
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          SCOOP_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          git clone "https://x-access-token:${SCOOP_TOKEN}@github.com/Wick-Lim/scoop-bucket.git" scoop
+          mkdir -p scoop/bucket
+          cp manifests/packaging/scoop/loom-vcs.json scoop/bucket/loom-vcs.json
+          cd scoop
+          git config user.name "Wick-Lim"
+          git config user.email "wicklim90@gmail.com"
+          git add bucket/loom-vcs.json
+          if git diff --cached --quiet; then
+            echo "Scoop manifest unchanged."
+            exit 0
+          fi
+          git commit -m "chore(loom-vcs): update manifest to ${TAG}"
+          git push
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Required Secret
+        id: check
+        env:
+          SECRET_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$SECRET_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "CARGO_REGISTRY_TOKEN is not configured; skipping crates.io publish."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.check.outputs.enabled == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.check.outputs.enabled == 'true'
+      - name: Publish Workspace Crates in Dependency Order
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          publish_crate() {
+            crate="$1"
+            set +e
+            out="$(cargo publish --locked -p "$crate" 2>&1)"
+            rc=$?
+            set -e
+            echo "$out"
+            if [ $rc -ne 0 ]; then
+              if echo "$out" | grep -qi "already exists"; then
+                echo "$crate already published at this version; continuing."
+                return 0
+              fi
+              return $rc
+            fi
+          }
+          publish_crate loom-vcs-core
+          sleep 25
+          publish_crate loom-vcs-vfs
+          sleep 25
+          publish_crate loom-vcs-daemon
+          sleep 25
+          publish_crate loom-vcs

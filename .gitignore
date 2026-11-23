@@ -28,3 +28,7 @@ target/
 .loom/
 e2e-suite/target/
 benches/target/
+
+# Staged release binaries inside npm platform packages
+npm/*/bin/loom
+npm/*/bin/loom.exe

@@ -1,0 +1,24 @@
+{
+  "name": "loom-vcs-linux-arm64",
+  "version": "0.1.0",
+  "description": "Prebuilt Linux arm64 (glibc) binary for loom-vcs",
+  "license": "MIT OR Apache-2.0",
+  "author": "Wick-Lim <wicklim90@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wick-Lim/loom.git"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin/"
+  ],
+  "preferUnplugged": true
+}

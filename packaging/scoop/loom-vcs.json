@@ -1,0 +1,33 @@
+{
+  "version": "0.1.0",
+  "description": "Multi-agent native, local-first version control system (Project Loom)",
+  "homepage": "https://github.com/Wick-Lim/loom",
+  "license": "MIT OR Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Wick-Lim/loom/releases/download/v0.1.0/loom-vcs-v0.1.0-x86_64-pc-windows-msvc.zip",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "arm64": {
+      "url": "https://github.com/Wick-Lim/loom/releases/download/v0.1.0/loom-vcs-v0.1.0-aarch64-pc-windows-msvc.zip",
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "bin": "loom.exe",
+  "checkver": {
+    "github": "https://github.com/Wick-Lim/loom"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Wick-Lim/loom/releases/download/v$version/loom-vcs-v$version-x86_64-pc-windows-msvc.zip"
+      },
+      "arm64": {
+        "url": "https://github.com/Wick-Lim/loom/releases/download/v$version/loom-vcs-v$version-aarch64-pc-windows-msvc.zip"
+      }
+    },
+    "hash": {
+      "url": "$baseurl/SHA256SUMS.txt"
+    }
+  }
+}
