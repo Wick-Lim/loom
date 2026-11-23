@@ -1,0 +1,17 @@
+[package]
+name = "e2e-suite"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Crucial: isolates e2e-suite from the parent Loom Cargo workspace
+[workspace]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tempfile = "3"
+toml = "1.2.2"
+
+[lints.rust]
+warnings = "deny"

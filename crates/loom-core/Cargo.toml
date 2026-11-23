@@ -1,0 +1,29 @@
+[package]
+name = "loom-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+automerge.workspace = true
+blake3.workspace = true
+memmap2.workspace = true
+redb.workspace = true
+rmp-serde.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+streaming-iterator.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tree-sitter.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-typescript.workspace = true
+uuid.workspace = true
+zstd.workspace = true

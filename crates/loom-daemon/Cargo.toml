@@ -1,0 +1,45 @@
+[package]
+name = "loom-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "loomd"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+bytes.workspace = true
+clap.workspace = true
+gix.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+interprocess.workspace = true
+loom-core.workspace = true
+loom-vfs.workspace = true
+notify.workspace = true
+notify-debouncer-full.workspace = true
+redb.workspace = true
+rmcp.workspace = true
+rmp-serde.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+streaming-iterator.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tree-sitter.workspace = true
+uuid.workspace = true
+zstd.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
